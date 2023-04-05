@@ -1,0 +1,57 @@
+K8s Cluster Master & Node Creation
+
+
+1. Create 3 instances with configuration below
+
+.Name the instances
+.Number of instances : 3
+.Ubuntu 18.04
+.Instance type : t2.medium
+.Create a key pair
+.Network settings : 
+ port 22 (SSH)
+ All Traffic 
+ port 80 (HTTP)
+ port 443 (HTTPS)
+ (select custom TCP as type)port 6443 (Kubernetes API server)
+	(Total 5 security group rules)
+.Launch the Instance
+
+2.Connect all 3 instance's ssh via gitbash & paste all commands individually on all 3 instances
+
+yes
+sudo -i
+sudo apt-get update
+sudo apt-get install docker.io -y
+sudo systemctl enable docker
+sudo systemctl start docker
+sudo apt-get install -y apt-transport-https curl
+curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+sudo apt-get update
+sudo apt-get install -y kubelet kubeadm kubectl
+sudo apt-mark hold kubelet kubeadm kubectl .......(Only run on Master)
+
+3.On master instance commands to run
+
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+
+kubeadm token create --print-join-command
+(copy the output command & paste on node)
+
+4. On Node run the above command 
+
+it appears lik this
+
+(kubeadm join 172.31.30.103:6443 --token cik2y7.4fyyhl11xanhyjqs --discovery-token-ca-cert-hash sha256:98777a54b11cbc974da1db59839f75b55d14acfd48f380d74de97020c81a41c2
+)
+
+5. Check if pods are ready
+
+kubctl get nodes

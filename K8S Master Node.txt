@@ -1,0 +1,241 @@
+K8S Master Node Installation
+
+Create 3 inst
+1 inst of t2.medium
+2 inst of t2.micro
+
+(Note : Apply all cmds on all 3 instances untill you will know further)
+
+sudo -i
+
+apt-get update
+
+sudo apt-get remove docker docker-engine docker.io containerd runc
+
+sudo apt-get update
+
+(copy & paste all 5 lines at a time)
+sudo apt-get install \
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release
+
+enter
+y
+enter
+
+sudo mkdir -m 0755 -p /etc/apt/keyrings
+
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+enter
+
+sudo apt-get update
+
+sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+y
+
+cat <<EOF | sudo tee /etc/docker/daemon.json
+{
+"exec-opts": ["native.cgroupdriver=systemd"],
+"log-driver": "json-file",
+"log-opts": {
+"max-size": "100m"
+},
+"storage-driver": "overlay2"
+}
+EOF
+
+enter
+
+sudo systemctl enable docker
+
+sudo systemctl daemon-reload
+
+sudo systemctl restart docker
+
+docker --version
+
+sudo apt-get update
+
+sudo apt-get install -y apt-transport-https ca-certificates curl
+
+sudo curl -fsSLo /etc/apt/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
+
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+enter
+
+sudo apt-get update
+
+sudo apt-get install -y kubelet kubeadm kubectl
+
+sudo apt-mark hold kubelet kubeadm kubectl
+(Set on hold cmd shos up)
+------------------------------------
+On Master
+
+rm /etc/containerd/config.toml
+
+systemctl restart containerd
+
+kubeadm init 
+(it takes time wait a bit)
+
+(cont...)
+
+mkdir -p $HOME/.kube
+
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+-----------------------------------------
+On Both Nodes
+(We've copied it form Master gitbash)
+
+rm /etc/containerd/config.toml
+
+systemctl restart containerd
+
+(cont...)
+
+kubeadm join 172.31.2.143:6443 --token h1bkxv.pslqnql60mwewe3m \
+        --discovery-token-ca-cert-hash sha256:3f424276a29a9299e7536b9f5a156286a6c95ab212e7a2fec7ab926ccef09f6f
+------------------------------------------
+On Master
+
+kubectl get nodes
+(3 ips will show not ready)
+(cont..)
+
+kubectl apply -f https://github.com/weaveworks/weave/releases/download/v2.8.1/weave-daemonset-k8s.yaml
+(3 ips will show ready)
+
+(****The End)
+-----------------------------------------------------------------
+output(it will show like this)
+
+root@ip-172-31-16-225:~# kubectl get nodes
+NAME               STATUS     ROLES           AGE     VERSION
+ip-172-31-10-212   NotReady   <none>          2m4s    v1.26.3
+ip-172-31-16-225   NotReady   control-plane   4m34s   v1.26.3
+ip-172-31-3-123    NotReady   <none>          2m11s   v1.26.3
+root@ip-172-31-16-225:~# kubectl get nodes
+NAME               STATUS   ROLES           AGE     VERSION
+ip-172-31-10-212   Ready    <none>          2m44s   v1.26.3
+ip-172-31-16-225   Ready    control-plane   5m14s   v1.26.3
+ip-172-31-3-123    Ready    <none>          2m51s   v1.26.3
+
+------------------------------------------------------------------------
+vi pod.yml
+(Its open editor)
+..................
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hello-pod
+spec:
+ containers:
+   - name: first-container
+     image: nginx
+     ports:
+     - containerPort: 80
+...................
+esc :wq! Enter
+
+kubectl create -f pod.yml
+(O/P---pod/hello-pod created)
+
+kubectl get pods
+(O/P---hello-pod   1/1     Running   0          27s)
+
+root@ip-172-31-16-225:~# kubectl describe pods
+Name:             hello-pod
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             ip-172-31-10-212/172.31.10.212
+Start Time:       Wed, 05 Apr 2023 09:58:00 +0000
+Labels:           <none>
+Annotations:      <none>
+Status:           Running
+IP:               10.38.0.1
+IPs:
+  IP:  10.38.0.1
+Containers:
+  first-container:
+    Container ID:   containerd://b1e2092229bb7baa45a5b40e8831c10b142947a7dccee551f62208a48931f4fb
+    Image:          nginx
+    Image ID:       docker.io/library/nginx@sha256:2ab30d6ac53580a6db8b657abf0f68d75360ff5cc1670a85acb5bd85ba1b19c0
+    Port:           80/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Wed, 05 Apr 2023 09:58:05 +0000
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-zrp2m (ro)
+Conditions:
+  Type              Status
+  Initialized       True
+  Ready             True
+  ContainersReady   True
+  PodScheduled      True
+Volumes:
+  kube-api-access-zrp2m:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  101s  default-scheduler  Successfully assigned default/hello-pod to ip-172-31-10-212
+  Normal  Pulling    100s  kubelet            Pulling image "nginx"
+  Normal  Pulled     96s   kubelet            Successfully pulled image "nginx" in 4.164674791s (4.164683878s including waiting)
+  Normal  Created    96s   kubelet            Created container first-container
+  Normal  Started    96s   kubelet            Started container first-container
+
+
+root@ip-172-31-16-225:~# kubectl get pods -o wide
+NAME        READY   STATUS    RESTARTS   AGE    IP          NODE               NOMINATED NODE   READINESS GATES
+hello-pod   1/1     Running   0          3m3s   10.38.0.1   ip-172-31-10-212   <none>           <none>
+
+
+root@ip-172-31-16-225:~# kubectl get pods/hello-pod
+NAME        READY   STATUS    RESTARTS   AGE
+hello-pod   1/1      Running   0          3m48s
+
+
+root@ip-172-31-16-225:~# kubectl get pods --all-namespaces
+NAMESPACE     NAME                                       READY   STATUS    RESTARTS        AGE
+default       hello-pod                                  1/1     Running   0               4m5s
+kube-system   coredns-787d4945fb-bgczq                   1/1     Running   0               11m
+kube-system   coredns-787d4945fb-t6p4k                   1/1     Running   0               11m
+kube-system   etcd-ip-172-31-16-225                      1/1     Running   0               11m
+kube-system   kube-apiserver-ip-172-31-16-225            1/1     Running   0               11m
+kube-system   kube-controller-manager-ip-172-31-16-225   1/1     Running   0               11m
+kube-system   kube-proxy-2dtkj                           1/1     Running   0               9m5s
+kube-system   kube-proxy-f8djb                           1/1     Running   0               11m
+kube-system   kube-proxy-glpsv                           1/1     Running   0               8m58s
+kube-system   kube-scheduler-ip-172-31-16-225            1/1     Running   0               11m
+kube-system   weave-net-8s7gn                            2/2     Running   1 (6m56s ago)   7m2s
+kube-system   weave-net-x4bnr                            2/2     Running   1 (6m57s ago)   7m2s
+kube-system   weave-net-zt8gl                            2/2     Running   1 (6m56s ago)   7m2s
+
+
+root@ip-172-31-16-225:~# kubectl get pods -o wide
+NAME        READY   STATUS    RESTARTS   AGE   IP          NODE               NOMINATED NODE   READINESS GATES
+hello-pod   1/1     Running   0          15m   10.38.0.1   ip-172-31-10-212   <none>           <none>
+root@ip-172-31-16-225:~#
